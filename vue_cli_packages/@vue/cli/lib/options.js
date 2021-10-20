@@ -73,6 +73,7 @@ exports.defaultPreset = {
   }
 }
 
+// .vuerc的默认配置 
 exports.defaults = {
   lastChecked: undefined,
   latestVersion: undefined,

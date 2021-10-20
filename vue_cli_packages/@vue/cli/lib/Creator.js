@@ -72,6 +72,11 @@ module.exports = class Creator extends EventEmitter {
     const { run, name, context, afterInvokeCbs, afterAnyInvokeCbs } = this
 
     if (!preset) {
+    // 先取命令行参数里的preset配置，有3种情况：
+    /* 
+    1. vue create foo --preset bar：
+    
+     */
       if (cliOptions.preset) {
         // vue create foo --preset bar
         preset = await this.resolvePreset(cliOptions.preset, cliOptions.clone)
@@ -391,12 +396,18 @@ module.exports = class Creator extends EventEmitter {
   }
 
   getPresets () {
+    // 读取.vuerc内容
     const savedOptions = loadOptions()
+    // 将默认的presets配置与读取到的.vuerc里的presets配置合并
+    // 默认的presets包括：default、__default_vue_3__
+    // 假设.vuerc里有之前保存的：vue-cli-demo
+    // 那么最终`getPresets`返回的presets这个对象，对象包含有3个key: default、__default_vue_3__、vue-cli-demo
     return Object.assign({}, savedOptions.presets, defaults.presets)
   }
 
   resolveIntroPrompts () {
     const presets = this.getPresets()
+    // 处理预设选项
     const presetChoices = Object.entries(presets).map(([name, preset]) => {
       let displayName = name
       if (name === 'default') {
@@ -410,6 +421,7 @@ module.exports = class Creator extends EventEmitter {
         value: name
       }
     })
+    // 预设选项，选择项包括： 默认的2个 + .vuerc里的（如果有）+ 手动选择
     const presetPrompt = {
       name: 'preset',
       type: 'list',
@@ -424,7 +436,7 @@ module.exports = class Creator extends EventEmitter {
     }
     const featurePrompt = {
       name: 'features',
-      when: isManualMode,
+      when: isManualMode, // 只有在用户选择了【手动选择】才有这个prompt询问
       type: 'checkbox',
       message: 'Check the features needed for your project:',
       choices: [],
@@ -437,6 +449,7 @@ module.exports = class Creator extends EventEmitter {
   }
 
   resolveOutroPrompts () {
+    // 将babel/eslint等配置放在package.json 还是 分别抽离成独立的文件
     const outroPrompts = [
       {
         name: 'useConfigFiles',
@@ -454,6 +467,7 @@ module.exports = class Creator extends EventEmitter {
           }
         ]
       },
+      // 是否将预设配置保存在项目中（.vuerc）
       {
         name: 'save',
         when: isManualMode,
@@ -461,6 +475,7 @@ module.exports = class Creator extends EventEmitter {
         message: 'Save this as a preset for future projects?',
         default: false
       },
+      // 输入将要保存的presets的名称
       {
         name: 'saveName',
         when: answers => answers.save,
