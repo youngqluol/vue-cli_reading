@@ -14,9 +14,12 @@ const isString = val => typeof val === 'string'
 const isFunction = val => typeof val === 'function'
 const isObject = val => val && typeof val === 'object'
 const mergeArrayWithDedupe = (a, b) => Array.from(new Set([...a, ...b]))
+
+// delete值为null的属性
 function pruneObject (obj) {
   if (typeof obj === 'object') {
     for (const k in obj) {
+      // 对象的内置属相不处理
       if (!Object.prototype.hasOwnProperty.call(obj, k)) {
         continue
       }

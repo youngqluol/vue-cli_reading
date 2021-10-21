@@ -49,7 +49,9 @@ module.exports = class Creator extends EventEmitter {
   constructor (name, context, promptModules) {
     super()
 
+    // 项目名称
     this.name = name
+    // 项目目录地址
     this.context = process.env.VUE_CLI_CONTEXT = context
     const { presetPrompt, featurePrompt } = this.resolveIntroPrompts()
 
@@ -72,11 +74,6 @@ module.exports = class Creator extends EventEmitter {
     const { run, name, context, afterInvokeCbs, afterAnyInvokeCbs } = this
 
     if (!preset) {
-    // 先取命令行参数里的preset配置，有3种情况：
-    /* 
-    1. vue create foo --preset bar：
-    
-     */
       if (cliOptions.preset) {
         // vue create foo --preset bar
         preset = await this.resolvePreset(cliOptions.preset, cliOptions.clone)
