@@ -244,7 +244,7 @@ constructor (name, context, promptModules) {
   }
 ```
 
-`resolveIntroPrompts()`这个方法：
+`resolveIntroPrompts()`方法：
 
 ```js
   getPresets () {
@@ -417,176 +417,16 @@ async promptAndResolvePreset (answers = null) {
 2. 确定包管理器：yarn/npm/pnpm
 3. 生成`package.json`
 4. 将项目目录初始化为git仓库
-5. 执行`install`，安装CLI plugins
-6. 执行生成器`Gererator`
-7. 再次执行`install`，安装依赖（由生成器generators注入）
+5. 执行`install`，安装CLI plugins（如：@vue/cli-plugin-babel、@vue/cli-plugin-eslint、@vue/cli-plugin-router等）
+6. 执行生成器`Generator`
+7. 再次执行`install`，安装生产依赖（由生成器generators注入，如：eslint、vue、vue-router、vuex等）
 8. 完成
 
-我们来看下关键的`执行生成器`环节：
-
-```js
-    const plugins = await this.resolvePlugins(preset.plugins, pkg)
-    const generator = new Generator(context, {
-      pkg,
-      plugins,
-      afterInvokeCbs,
-      afterAnyInvokeCbs
-    })
-    await generator.generate({
-      extractConfigFiles: preset.useConfigFiles
-    })
-```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+第6步`Generator`非常关键，是在确定`options`选择后，分别执行各个插件里的`generator`逻辑，对文件进行整合，写入目录，最后才形成一个完整项目。
 
 
 ```js
-async create (cliOptions = {}, preset = null) {
-    const isTestOrDebug = process.env.VUE_CLI_TEST || process.env.VUE_CLI_DEBUG
-    const { run, name, context, afterInvokeCbs, afterAnyInvokeCbs } = this
-
-    if (!preset) {
-      if (cliOptions.preset) {
-        // vue create foo --preset bar
-        preset = await this.resolvePreset(cliOptions.preset, cliOptions.clone)
-      } else if (cliOptions.default) {
-        // vue create foo --default
-        preset = defaults.presets.default
-      } else if (cliOptions.inlinePreset) {
-        // vue create foo --inlinePreset {...}
-        try {
-          preset = JSON.parse(cliOptions.inlinePreset)
-        } catch (e) {
-          error(`CLI inline preset is not valid JSON: ${cliOptions.inlinePreset}`)
-          exit(1)
-        }
-      } else {
-        preset = await this.promptAndResolvePreset()
-      }
-    }
-
-    // clone before mutating
-    preset = cloneDeep(preset)
-    // inject core service
-    preset.plugins['@vue/cli-service'] = Object.assign({
-      projectName: name
-    }, preset)
-
-    if (cliOptions.bare) {
-      preset.plugins['@vue/cli-service'].bare = true
-    }
-
-    // legacy support for router
-    if (preset.router) {
-      preset.plugins['@vue/cli-plugin-router'] = {}
-
-      if (preset.routerHistoryMode) {
-        preset.plugins['@vue/cli-plugin-router'].historyMode = true
-      }
-    }
-
-    // legacy support for vuex
-    if (preset.vuex) {
-      preset.plugins['@vue/cli-plugin-vuex'] = {}
-    }
-
-    const packageManager = (
-      cliOptions.packageManager ||
-      loadOptions().packageManager ||
-      (hasYarn() ? 'yarn' : null) ||
-      (hasPnpm3OrLater() ? 'pnpm' : 'npm')
-    )
-
-    await clearConsole()
-    const pm = new PackageManager({ context, forcePackageManager: packageManager })
-
-    log(`✨  Creating project in ${chalk.yellow(context)}.`)
-    this.emit('creation', { event: 'creating' })
-
-    // get latest CLI plugin version
-    const { latestMinor } = await getVersions()
-
-    // generate package.json with plugin dependencies
-    const pkg = {
-      name,
-      version: '0.1.0',
-      private: true,
-      devDependencies: {},
-      ...resolvePkg(context)
-    }
-    const deps = Object.keys(preset.plugins)
-    deps.forEach(dep => {
-      if (preset.plugins[dep]._isPreset) {
-        return
-      }
-
-      let { version } = preset.plugins[dep]
-
-      if (!version) {
-        if (isOfficialPlugin(dep) || dep === '@vue/cli-service' || dep === '@vue/babel-preset-env') {
-          version = isTestOrDebug ? `latest` : `~${latestMinor}`
-        } else {
-          version = 'latest'
-        }
-      }
-
-      pkg.devDependencies[dep] = version
-    })
-
-    // write package.json
-    await writeFileTree(context, {
-      'package.json': JSON.stringify(pkg, null, 2)
-    })
-
-    // generate a .npmrc file for pnpm, to persist the `shamefully-flatten` flag
-    if (packageManager === 'pnpm') {
-      const pnpmConfig = hasPnpmVersionOrLater('4.0.0')
-        ? 'shamefully-hoist=true\n'
-        : 'shamefully-flatten=true\n'
-
-      await writeFileTree(context, {
-        '.npmrc': pnpmConfig
-      })
-    }
-
-    // intilaize git repository before installing deps
-    // so that vue-cli-service can setup git hooks.
-    const shouldInitGit = this.shouldInitGit(cliOptions)
-    if (shouldInitGit) {
-      log(`🗃  Initializing git repository...`)
-      this.emit('creation', { event: 'git-init' })
-      await run('git init')
-    }
-
-    // install plugins
-    log(`⚙\u{fe0f}  Installing CLI plugins. This might take a while...`)
-    log()
-    this.emit('creation', { event: 'plugins-install' })
-
-    if (isTestOrDebug && !process.env.VUE_CLI_TEST_DO_INSTALL_PLUGIN) {
-      // in development, avoid installation process
-      await require('./util/setupDevProject')(context)
-    } else {
-      await pm.install()
-    }
-
     // run generator
-    log(`🚀  Invoking generators...`)
-    this.emit('creation', { event: 'invoking-generators' })
     const plugins = await this.resolvePlugins(preset.plugins, pkg)
     const generator = new Generator(context, {
       pkg,
@@ -597,74 +437,269 @@ async create (cliOptions = {}, preset = null) {
     await generator.generate({
       extractConfigFiles: preset.useConfigFiles
     })
-
-    // install additional deps (injected by generators)
-    log(`📦  Installing additional dependencies...`)
-    this.emit('creation', { event: 'deps-install' })
-    log()
-    if (!isTestOrDebug || process.env.VUE_CLI_TEST_DO_INSTALL_PLUGIN) {
-      await pm.install()
-    }
-
-    // run complete cbs if any (injected by generators)
-    log(`⚓  Running completion hooks...`)
-    this.emit('creation', { event: 'completion-hooks' })
-    for (const cb of afterInvokeCbs) {
-      await cb()
-    }
-    for (const cb of afterAnyInvokeCbs) {
-      await cb()
-    }
-
-    if (!generator.files['README.md']) {
-      // generate README.md
-      log()
-      log('📄  Generating README.md...')
-      await writeFileTree(context, {
-        'README.md': generateReadme(generator.pkg, packageManager)
-      })
-    }
-
-    // commit initial state
-    let gitCommitFailed = false
-    if (shouldInitGit) {
-      await run('git add -A')
-      if (isTestOrDebug) {
-        await run('git', ['config', 'user.name', 'test'])
-        await run('git', ['config', 'user.email', 'test@test.com'])
-        await run('git', ['config', 'commit.gpgSign', 'false'])
-      }
-      const msg = typeof cliOptions.git === 'string' ? cliOptions.git : 'init'
-      try {
-        await run('git', ['commit', '-m', msg, '--no-verify'])
-      } catch (e) {
-        gitCommitFailed = true
-      }
-    }
-
-    // log instructions
-    log()
-    log(`🎉  Successfully created project ${chalk.yellow(name)}.`)
-    if (!cliOptions.skipGetStarted) {
-      log(
-        `👉  Get started with the following commands:\n\n` +
-        (this.context === process.cwd() ? `` : chalk.cyan(` ${chalk.gray('$')} cd ${name}\n`)) +
-        chalk.cyan(` ${chalk.gray('$')} ${packageManager === 'yarn' ? 'yarn serve' : packageManager === 'pnpm' ? 'pnpm run serve' : 'npm run serve'}`)
-      )
-    }
-    log()
-    this.emit('creation', { event: 'done' })
-
-    if (gitCommitFailed) {
-      warn(
-        `Skipped git commit due to missing username and email in git config, or failed to sign commit.\n` +
-        `You will need to perform the initial commit yourself.\n`
-      )
-    }
-
-    generator.printExitLogs()
-  }
-
 ```
+
+`Generator`类及`generator()`接受的参数有：
+1. pkg： `package.json`,
+2. plugins： 
+  ```js
+  // { id: options } => [{ id, apply, options }]
+  async resolvePlugins (rawPlugins, pkg) {
+    // ensure cli-service is invoked first
+    rawPlugins = sortObject(rawPlugins, ['@vue/cli-service'], true)
+    const plugins = []
+    for (const id of Object.keys(rawPlugins)) {
+      // 使用Module.createRequire创建的require()方法加载模块
+      const apply = loadModule(`${id}/generator`, this.context) || (() => {})
+      let options = rawPlugins[id] || {}
+
+      // 处理plugin里的prompts
+      if (options.prompts) {
+        let pluginPrompts = loadModule(`${id}/prompts`, this.context)
+
+        if (pluginPrompts) {
+          const prompt = inquirer.createPromptModule()
+
+          if (typeof pluginPrompts === 'function') {
+            pluginPrompts = pluginPrompts(pkg, prompt)
+          }
+          if (typeof pluginPrompts.getPrompts === 'function') {
+            pluginPrompts = pluginPrompts.getPrompts(pkg, prompt)
+          }
+
+          log()
+          log(`${chalk.cyan(options._isPreset ? `Preset options:` : id)}`)
+          options = await prompt(pluginPrompts)
+        }
+      }
+
+      plugins.push({ id, apply, options })
+    }
+    return plugins
+  }
+  ```
+
+  对`preset.plugins`处理后，得到`Generator`需要的`plugins`参数，如：
+
+  ```js
+  {
+    "@vue/cli-plugin-babel": {},
+    "@vue/cli-plugin-router": {
+      "historyMode": false
+    },
+    "@vue/cli-plugin-eslint": {
+      "config": "base",
+      "lintOn": [
+        "save"
+      ]
+    }
+  }
+  ```
+
+  `plugins`：
+
+  ```js
+  [
+    {
+      id: "@vue/cli-plugin-babel",
+      apply: "@vue/cli-plugin-babel里的generator.js或generator/index.js导出的函数",
+      options: {}
+    },
+    ...
+  ]
+  ```
+
+  3. afterInvokeCb、afterAnyInvokeCbs： `Generator`实例收集的`plugins`里的回调，此时均为`[]`
+  4. extractConfigFiles：是否将配置抽离成独立的文件，如：`vue.config.js`、`babel.config.js`、`.eslintrc`等
+
+
+`generate()`方法：
+
+```js
+async generate ({
+    extractConfigFiles = false,
+    checkExisting = false
+  } = {}) {
+    await this.initPlugins()
+
+    // save the file system before applying plugin for comparison
+    const initialFiles = Object.assign({}, this.files)
+    // extract configs from package.json into dedicated files.
+    this.extractConfigFiles(extractConfigFiles, checkExisting)
+    // wait for file resolve
+    await this.resolveFiles()
+    // set package.json
+    this.sortPkg()
+    this.files['package.json'] = JSON.stringify(this.pkg, null, 2) + '\n'
+    // write/update file tree to disk
+    await writeFileTree(this.context, this.files, initialFiles, this.filesModifyRecord)
+  }
+```
+
+分为以下几步：
+
+1. 初始化所有插件（包括官方插件、第三方插件），执行插件内的`generator`：
+
+```js
+async initPlugins () {
+    const { rootOptions, invoking } = this
+    const pluginIds = this.plugins.map(p => p.id)
+
+    // avoid modifying the passed afterInvokes, because we want to ignore them from other plugins
+    const passedAfterInvokeCbs = this.afterInvokeCbs
+    this.afterInvokeCbs = []
+    // apply hooks from all plugins to collect 'afterAnyHooks'
+    // 所有插件
+    for (const plugin of this.allPlugins) {
+      const { id, apply } = plugin
+      const api = new GeneratorAPI(id, this, {}, rootOptions)
+
+      if (apply.hooks) {
+        await apply.hooks(api, {}, rootOptions, pluginIds)
+      }
+    }
+
+    // We are doing save/load to make the hook order deterministic
+    // save "any" hooks
+    const afterAnyInvokeCbsFromPlugins = this.afterAnyInvokeCbs
+
+    // reset hooks
+    this.afterInvokeCbs = passedAfterInvokeCbs
+    this.afterAnyInvokeCbs = []
+    this.postProcessFilesCbs = []
+
+    // apply generators from plugins
+    for (const plugin of this.plugins) {
+      const { id, apply, options } = plugin
+      // GeneratorAPI类包含很多方法，如：
+      // 1. extendPackage： 扩展package.json
+      // 2. render：Render template files into the virtual files tree object.
+      // 3. injectImports： Add import statements to a file.
+      // ......
+      const api = new GeneratorAPI(id, this, options, rootOptions)
+      // 上文提到，apply是插件里的generator.js或generator/index.js导出的函数
+      // 这里将GeneratorAPI类的实例api传入并执行
+      await apply(api, options, rootOptions, invoking)
+
+      if (apply.hooks) {
+        // while we execute the entire `hooks` function,
+        // only the `afterInvoke` hook is respected
+        // because `afterAnyHooks` is already determined by the `allPlugins` loop above
+        await apply.hooks(api, options, rootOptions, pluginIds)
+      }
+    }
+    // restore "any" hooks
+    this.afterAnyInvokeCbs = afterAnyInvokeCbsFromPlugins
+  }
+```
+
+2. 将package.json里的配置抽离成独立文件（根据配置）
+
+```js
+extractConfigFiles (extractAll, checkExisting) {
+    const configTransforms = Object.assign({},
+      defaultConfigTransforms,
+      this.configTransforms,
+      reservedConfigTransforms
+    )
+    const extract = key => {
+      if (
+        configTransforms[key] &&
+        this.pkg[key] &&
+        // do not extract if the field exists in original package.json
+        !this.originalPkg[key]
+      ) {
+        const value = this.pkg[key]
+        const configTransform = configTransforms[key]
+        const res = configTransform.transform(
+          value,
+          checkExisting,
+          this.files,
+          this.context
+        )
+        const { content, filename } = res
+        this.files[filename] = ensureEOL(content)
+        delete this.pkg[key]
+      }
+    }
+    if (extractAll) {
+      for (const key in this.pkg) {
+        extract(key)
+      }
+    } else {
+      if (!process.env.VUE_CLI_TEST) {
+        // by default, always extract vue.config.js
+        extract('vue')
+      }
+      // always extract babel.config.js as this is the only way to apply
+      // project-wide configuration even to dependencies.
+      // TODO: this can be removed when Babel supports root: true in package.json
+      extract('babel')
+    }
+  }
+```
+
+3. 执行插件初始化时收集的各种文件的处理数组，然后将返回的内容收集到files字段。
+
+```js
+async resolveFiles () {
+    const files = this.files
+    for (const middleware of this.fileMiddlewares) {
+      await middleware(files, ejs.render)
+    }
+
+    // normalize file paths on windows
+    // all paths are converted to use / instead of \
+    normalizeFilePaths(files)
+
+    // handle imports and root option injections
+    Object.keys(files).forEach(file => {
+      let imports = this.imports[file]
+      imports = imports instanceof Set ? Array.from(imports) : imports
+      if (imports && imports.length > 0) {
+        files[file] = runTransformation(
+          { path: file, source: files[file] },
+          require('./util/codemods/injectImports'),
+          { imports }
+        )
+      }
+
+      let injections = this.rootOptions[file]
+      injections = injections instanceof Set ? Array.from(injections) : injections
+      if (injections && injections.length > 0) {
+        files[file] = runTransformation(
+          { path: file, source: files[file] },
+          require('./util/codemods/injectOptions'),
+          { injections }
+        )
+      }
+    })
+
+    for (const postProcess of this.postProcessFilesCbs) {
+      await postProcess(files)
+    }
+    debug('vue:cli-files')(this.files)
+  }
+```
+
+4. 写入文件
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
