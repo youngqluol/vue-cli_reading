@@ -52,8 +52,8 @@ class GeneratorAPI {
     this.pluginsData = generator.plugins
       .filter(({ id }) => id !== `@vue/cli-service`)
       .map(({ id }) => ({
-        name: toShortPluginId(id),
-        link: getPluginLink(id)
+        name: toShortPluginId(id), // 简化插件名称，如：@vue/cli-plugin-babel => babel
+        link: getPluginLink(id) // 插件地址
       }))
     /* eslint-enable no-shadow */
 

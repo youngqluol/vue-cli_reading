@@ -34,6 +34,7 @@ function getOrderParams (plugin) {
 
 /**
  * See leetcode 210
+ * 拓扑排序
  * @param {Array<Plugin>} plugins
  * @returns {Array<Plugin>}
  */

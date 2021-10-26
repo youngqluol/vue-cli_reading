@@ -294,7 +294,7 @@ module.exports = class Generator {
   resolveAllPlugins () {
     const allPlugins = []
     // 1. 在依赖中（开发依赖、生产依赖）找到plugin
-    // 2. 加载plugin的generator
+    // 2. 引入plugin的generator
     // 3. 对插件排序
     Object.keys(this.pkg.dependencies || {})
       .concat(Object.keys(this.pkg.devDependencies || {}))

@@ -549,7 +549,7 @@ async initPlugins () {
     const passedAfterInvokeCbs = this.afterInvokeCbs
     this.afterInvokeCbs = []
     // apply hooks from all plugins to collect 'afterAnyHooks'
-    // 所有插件
+    // 所有插件：开发依赖、生产依赖中包含的插件
     for (const plugin of this.allPlugins) {
       const { id, apply } = plugin
       const api = new GeneratorAPI(id, this, {}, rootOptions)
@@ -568,7 +568,7 @@ async initPlugins () {
     this.afterAnyInvokeCbs = []
     this.postProcessFilesCbs = []
 
-    // apply generators from plugins
+    // apply generators from plugins: preset.plugins包含的插件
     for (const plugin of this.plugins) {
       const { id, apply, options } = plugin
       // GeneratorAPI类包含很多方法，如：
@@ -579,6 +579,7 @@ async initPlugins () {
       const api = new GeneratorAPI(id, this, options, rootOptions)
       // 上文提到，apply是插件里的generator.js或generator/index.js导出的函数
       // 这里将GeneratorAPI类的实例api传入并执行
+      
       await apply(api, options, rootOptions, invoking)
 
       if (apply.hooks) {
@@ -592,6 +593,10 @@ async initPlugins () {
     this.afterAnyInvokeCbs = afterAnyInvokeCbsFromPlugins
   }
 ```
+
+执行`generator`的环节，是先执行`@vue/cli-service`里的`generator`，渲染目录下的`template`，得到基础项目。
+之后执行其他插件的`generator`，是在基础项目上进行内容块的替换、增加，最后得到完整项目。
+
 
 2. 将package.json里的配置抽离成独立文件（根据配置）
 
